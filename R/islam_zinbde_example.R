@@ -60,7 +60,15 @@ progressr::handlers("txtprogressbar")
 fit_control_example <- fit_control(
   parallel = TRUE,
   progress = TRUE,
-  future.chunk.size = 5L
+  future.chunk.size = 5L,
+  nb = nb_control(
+    nb_mean_control = nb_mean_control(use_levenberg = TRUE)
+  ),
+  logistic = logistic_control(use_levenberg = TRUE),
+  zinb = zinb_control(
+    logistic_control = logistic_control(use_levenberg = TRUE),
+    nb_control = nb_mean_control(use_levenberg = TRUE)
+  )
 )
 
 glmmTMB_priors <- data.frame(
