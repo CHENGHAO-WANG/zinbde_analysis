@@ -31,26 +31,25 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 islam <- readRDS(input_file)
 cat("Original dimensions:", paste(dim(islam$count), collapse = " x "), "\n")
 
-islam$metadata$label <- factor(
-  islam$metadata$label,
-  levels = c("Embryonic fibroblast", "Embryonic stem cell")
-)
-# Use a syntactic example covariate so glmmTMB prior and coefficient matching
-# are stable while preserving the stem-cell-versus-fibroblast contrast.
-islam$metadata$cell_type <- factor(
-  ifelse(islam$metadata$label == "Embryonic stem cell", "stem_cell", "fibroblast"),
-  levels = c("fibroblast", "stem_cell")
-)
+if (!"cell_type" %in% names(islam$metadata)) {
+  stop(
+    "Missing metadata column 'cell_type'. Run R/data_preprocessing.R before this example.",
+    call. = FALSE
+  )
+}
 
 keep_gene <- rowSums(islam$count > 0) >= 5L
 islam_filtered <- islam[keep_gene, ]
 cat("Filtered gene count:", nrow(islam_filtered$count), "\n")
 
+islam_filtered <- estimate_size_factor(islam_filtered)
+
+# randomly select 100 genes
 sampled_genes <- sample(rownames(islam_filtered$count), size = 100L)
 islam_example <- islam_filtered[sampled_genes, ]
 cat("Sampled gene count:", nrow(islam_example$count), "\n")
 
-islam_example <- estimate_size_factor(islam_example)
+# islam_example <- estimate_size_factor(islam_example)
 
 workers <- max(1L, future::availableCores() - 1L)
 future::plan(future::multisession, workers = workers)

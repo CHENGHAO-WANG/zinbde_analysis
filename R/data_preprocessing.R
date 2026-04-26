@@ -65,6 +65,16 @@ islam <- islam[!grepl("^RNA_SPIKE", rownames(islam$count)),]
 dim(islam)
 
 islam[["cell_id"]] <- NULL
+islam$metadata$label <- factor(
+  islam$metadata$label,
+  levels = c("Embryonic fibroblast", "Embryonic stem cell")
+)
+# Add a syntactic cell-type covariate for formulas that need stable
+# coefficient names, while preserving the original descriptive label.
+islam$metadata$cell_type <- factor(
+  ifelse(islam$metadata$label == "Embryonic stem cell", "stem_cell", "fibroblast"),
+  levels = c("fibroblast", "stem_cell")
+)
 
 head(islam$metadata)
 
