@@ -64,7 +64,6 @@ fit_control_example <- fit_control(
   nb = nb_control(
     nb_mean_control = nb_mean_control(use_levenberg = TRUE) # Levengerg damping doesn't affect glmmTMB optimizers
   ),
-  logistic = logistic_control(use_levenberg = TRUE),
   zinb = zinb_control(
     logistic_control = logistic_control(use_levenberg = TRUE),
     nb_control = nb_mean_control(use_levenberg = TRUE)
