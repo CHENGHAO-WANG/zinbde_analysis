@@ -77,14 +77,9 @@ make_em_control <- function(component_tol, m_step_tol, m_step_max_iter) {
     nb = nb_control(
       nb_mean_control = nb_mean_control(
         nb_max_iter = component_max_iter,
-        nb_tol = component_tol,
+        nb_tol = tight_tol,
         use_levenberg = TRUE
       )
-    ),
-    logistic = logistic_control(
-      logistic_max_iter = component_max_iter,
-      logistic_tol = component_tol,
-      use_levenberg = TRUE
     ),
     zinb = zinb_control(
       em_fisher_control = zinb_em_fisher_control(
@@ -124,7 +119,6 @@ make_bfgs_control <- function() {
       nb_mean_control = nb_mean_control(use_levenberg = TRUE),
       bfgs_control = nb_bfgs_control(reltol = tight_tol)
     ),
-    logistic = logistic_control(use_levenberg = TRUE),
     zinb = zinb_control(
       bfgs_control = zinb_bfgs_control(reltol = tight_tol),
       logistic_control = logistic_control(use_levenberg = TRUE),
@@ -143,7 +137,6 @@ make_glmmTMB_control <- function() {
     nb = nb_control(
       nb_mean_control = nb_mean_control(use_levenberg = TRUE)
     ),
-    logistic = logistic_control(use_levenberg = TRUE),
     zinb = zinb_control(
       logistic_control = logistic_control(use_levenberg = TRUE),
       nb_control = nb_mean_control(use_levenberg = TRUE)
