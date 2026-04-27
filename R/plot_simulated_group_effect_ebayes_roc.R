@@ -138,6 +138,19 @@ compute_cutoff_performance <- function(truth, p_value, cutoff) {
   )
 }
 
+# Wrap long fit-setting labels so legends fit in exported ROC images.
+wrap_legend_label <- function(label) {
+  vapply(
+    label,
+    function(x) {
+      readable_label <- gsub("__", " | ", x, fixed = TRUE)
+      readable_label <- gsub("_", " ", readable_label, fixed = TRUE)
+      paste(strwrap(readable_label, width = 32), collapse = "\n")
+    },
+    character(1)
+  )
+}
+
 # Save one ROC plot for one stage, component, and p-value metric.
 plot_roc <- function(roc_data, cutoff_data, stage, component, metric_label) {
   plot_data <- roc_data[
@@ -162,6 +175,7 @@ plot_roc <- function(roc_data, cutoff_data, stage, component, metric_label) {
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey60") +
     geom_step(linewidth = 0.7) +
     geom_point(data = point_data, aes(x = fpr, y = tpr), size = 1.8) +
+    scale_color_discrete(labels = wrap_legend_label) +
     coord_equal(xlim = c(0, 1), ylim = c(0, 1), expand = FALSE) +
     labs(
       x = "False positive rate",
@@ -175,8 +189,10 @@ plot_roc <- function(roc_data, cutoff_data, stage, component, metric_label) {
       )
     ) +
     theme_minimal(base_size = 11) +
+    guides(color = guide_legend(ncol = 2, byrow = TRUE)) +
     theme(
       legend.position = "bottom",
+      legend.text = element_text(size = 8),
       plot.title = element_text(face = "bold")
     )
 
@@ -186,8 +202,8 @@ plot_roc <- function(roc_data, cutoff_data, stage, component, metric_label) {
       sprintf("roc_%s_%s_%s.png", stage, component, metric_label)
     ),
     plot = roc_plot,
-    width = 7,
-    height = 5.5,
+    width = 8,
+    height = 6.25,
     dpi = 300
   )
 }
