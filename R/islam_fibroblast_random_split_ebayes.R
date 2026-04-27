@@ -30,8 +30,8 @@ tight_tol <- 1e-8
 loose_tol <- 1e-2
 em_max_iter <- 100L
 component_max_iter <- 50L
-sample_size <- as.integer(Sys.getenv("ISLAM_RANDOM_SPLIT_SAMPLE_SIZE", "500"))
-n_iterations <- as.integer(Sys.getenv("ISLAM_RANDOM_SPLIT_ITERATIONS", "200"))
+sample_size <- as.integer(Sys.getenv("ISLAM_RANDOM_SPLIT_SAMPLE_SIZE", "100"))
+n_iterations <- as.integer(Sys.getenv("ISLAM_RANDOM_SPLIT_ITERATIONS", "20"))
 nb_formula <- ~ random_group
 zi_formula <- ~ random_group
 wald_coef <- "random_groupgroup_2"
