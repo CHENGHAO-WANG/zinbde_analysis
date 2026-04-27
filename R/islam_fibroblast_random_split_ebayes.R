@@ -120,29 +120,6 @@ format_wald_rows <- function(wald, iteration, stage) {
   wald
 }
 
-# Restore missing coefficient names from vcov matrices before Wald testing.
-name_coefficients_from_vcov <- function(fit) {
-  for (gene_id in fit$feature_ids) {
-    for (component in c("nb", "zi")) {
-      coefficients <- fit$coefficients[[gene_id]][[component]]
-      vcov_matrix <- fit$vcov[[gene_id]][[component]]
-
-      if (
-        is.numeric(coefficients) &&
-          is.matrix(vcov_matrix) &&
-          length(coefficients) == nrow(vcov_matrix) &&
-          (is.null(names(coefficients)) || any(!nzchar(names(coefficients)))) &&
-          !is.null(rownames(vcov_matrix)) &&
-          all(nzchar(rownames(vcov_matrix)))
-      ) {
-        names(fit$coefficients[[gene_id]][[component]]) <- rownames(vcov_matrix)
-      }
-    }
-  }
-
-  fit
-}
-
 # Save one histogram for one Wald-test metric, analysis stage, and component.
 plot_histogram <- function(results, stage, component, value_column, filename, x_label) {
   plot_data <- results[
@@ -363,12 +340,9 @@ for (iteration in seq_len(n_iterations)) {
       control = fit_control_random_split
     )
   )
-  fit <- name_coefficients_from_vcov(fit)
-
   wald_before <- wald_test(fit, coef = wald_coef)
 
   fit_ebayes <- Ebayes(fit)
-  fit_ebayes <- name_coefficients_from_vcov(fit_ebayes)
   wald_after <- wald_test(fit_ebayes, coef = wald_coef)
 
   row_index <- (iteration - 1L) * 2L
