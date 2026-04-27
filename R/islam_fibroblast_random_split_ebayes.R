@@ -24,7 +24,10 @@ library(ggplot2)
 set.seed(20260427)
 
 input_file <- file.path("data", "processed", "islam_dea_obj.rds")
-output_dir <- file.path("output", "islam_fibroblast_random_split_ebayes")
+output_dir <- Sys.getenv(
+  "ISLAM_RANDOM_SPLIT_OUTPUT_DIR",
+  file.path("output", "islam_fibroblast_random_split_ebayes")
+)
 wald_results_file <- file.path(output_dir, "wald_p_values.rds")
 
 tight_tol <- 1e-8
@@ -115,6 +118,29 @@ format_wald_rows <- function(wald, iteration, stage) {
   ]
   rownames(wald) <- NULL
   wald
+}
+
+# Restore missing coefficient names from vcov matrices before Wald testing.
+name_coefficients_from_vcov <- function(fit) {
+  for (gene_id in fit$feature_ids) {
+    for (component in c("nb", "zi")) {
+      coefficients <- fit$coefficients[[gene_id]][[component]]
+      vcov_matrix <- fit$vcov[[gene_id]][[component]]
+
+      if (
+        is.numeric(coefficients) &&
+          is.matrix(vcov_matrix) &&
+          length(coefficients) == nrow(vcov_matrix) &&
+          (is.null(names(coefficients)) || any(!nzchar(names(coefficients)))) &&
+          !is.null(rownames(vcov_matrix)) &&
+          all(nzchar(rownames(vcov_matrix)))
+      ) {
+        names(fit$coefficients[[gene_id]][[component]]) <- rownames(vcov_matrix)
+      }
+    }
+  }
+
+  fit
 }
 
 # Save one histogram for one Wald-test metric, analysis stage, and component.
@@ -337,10 +363,12 @@ for (iteration in seq_len(n_iterations)) {
       control = fit_control_random_split
     )
   )
+  fit <- name_coefficients_from_vcov(fit)
 
   wald_before <- wald_test(fit, coef = wald_coef)
 
   fit_ebayes <- Ebayes(fit)
+  fit_ebayes <- name_coefficients_from_vcov(fit_ebayes)
   wald_after <- wald_test(fit_ebayes, coef = wald_coef)
 
   row_index <- (iteration - 1L) * 2L
