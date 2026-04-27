@@ -1,10 +1,11 @@
 # Plot coefficient, SE, and dispersion agreement across Islam benchmark
 # settings. The script excludes genes with discordant zero-inflation decisions,
-# keeps consistently ZINB genes, and writes centered-difference and CV plots.
+# keeps consistently ZINB genes, and writes centered-difference and CV heatmaps.
 
 benchmark_dir <- file.path("output", "islam_fit_settings_benchmark")
 plot_dir <- file.path("output", "islam_fit_settings_benchmark_estimate_plots")
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+unlink(list.files(plot_dir, pattern = "[.]png$", full.names = TRUE))
 
 discordant_file <- file.path(benchmark_dir, "discordant_zi_decision_model_types.csv")
 decisions_file <- file.path(benchmark_dir, "zi_decisions.csv")
@@ -138,150 +139,200 @@ series_cv_order <- function(series_name) {
   series_summary$gene_id
 }
 
-# Generate enough distinct colors for setting and estimate-series lines.
-line_colors <- function(n) {
-  grDevices::hcl.colors(n, palette = "Dark 3")
+# Build a numeric matrix from long-form data using explicit row and column
+# orders. Duplicate row-column pairs are not expected in the benchmark summaries.
+long_to_matrix <- function(data, row_col, col_col, value_col, row_order, col_order) {
+  heatmap_matrix <- matrix(
+    NA_real_,
+    nrow = length(row_order),
+    ncol = length(col_order),
+    dimnames = list(row_order, col_order)
+  )
+  row_index <- match(data[[row_col]], row_order)
+  col_index <- match(data[[col_col]], col_order)
+  keep <- !is.na(row_index) & !is.na(col_index)
+  heatmap_matrix[cbind(row_index[keep], col_index[keep])] <- data[[value_col]][keep]
+
+  heatmap_matrix
 }
 
-# Draw a legend in its own plotting panel so long labels are not clipped by the
-# main plot margins or the PNG device boundary.
-draw_legend_panel <- function(labels, colors, columns) {
-  par(mar = c(0, 5, 0, 2), xpd = NA)
-  plot.new()
-  legend(
-    "center",
-    legend = labels,
+# Cluster heatmap rows while preserving the user-defined gene order on columns.
+cluster_row_order <- function(heatmap_matrix) {
+  if (nrow(heatmap_matrix) < 2L) {
+    return(seq_len(nrow(heatmap_matrix)))
+  }
+
+  clustering_matrix <- heatmap_matrix
+  for (row in seq_len(nrow(clustering_matrix))) {
+    missing <- is.na(clustering_matrix[row, ])
+    row_mean <- mean(clustering_matrix[row, ], na.rm = TRUE)
+    if (!is.finite(row_mean)) {
+      row_mean <- 0
+    }
+    clustering_matrix[row, missing] <- row_mean
+  }
+
+  stats::hclust(stats::dist(clustering_matrix))$order
+}
+
+# Make a symmetric blue-white-red scale for centered differences.
+difference_breaks <- function(values, color_count) {
+  max_abs <- max(abs(values), na.rm = TRUE)
+  if (!is.finite(max_abs) || max_abs == 0) {
+    max_abs <- 1
+  }
+  seq(-max_abs, max_abs, length.out = color_count + 1L)
+}
+
+# Make a white-yellow-red scale for non-negative CV values.
+cv_breaks <- function(values, color_count) {
+  max_value <- max(values, na.rm = TRUE)
+  if (!is.finite(max_value) || max_value == 0) {
+    max_value <- 1
+  }
+  seq(0, max_value, length.out = color_count + 1L)
+}
+
+# Draw the color scale below each heatmap so the data panel can keep full labels.
+draw_color_key <- function(colors, breaks, label) {
+  key_values <- seq(min(breaks), max(breaks), length.out = length(colors))
+
+  par(mar = c(5, 28, 0.5, 4))
+  image(
+    x = key_values,
+    y = 1,
+    z = matrix(key_values, nrow = length(key_values), ncol = 1L),
     col = colors,
-    lty = 1,
-    lwd = 1.2,
-    ncol = columns,
-    cex = 0.58,
-    bty = "n"
+    breaks = breaks,
+    axes = FALSE,
+    xlab = "",
+    ylab = ""
   )
+  axis(1, cex.axis = 0.75)
+  mtext(label, side = 1, line = 2.7, cex = 0.8)
+}
+
+# Draw a heatmap with clustered rows and fixed gene columns.
+plot_heatmap <- function(
+    heatmap_matrix,
+    colors,
+    breaks,
+    output_file,
+    main,
+    xlab,
+    key_label,
+    y_axis_cex = 0.5) {
+  row_order <- cluster_row_order(heatmap_matrix)
+  heatmap_matrix <- heatmap_matrix[row_order, , drop = FALSE]
+
+  grDevices::png(output_file, width = 3600, height = 2200, res = 220)
+  old_par <- par(no.readonly = TRUE)
+  on.exit({
+    par(old_par)
+    grDevices::dev.off()
+  })
+
+  layout(matrix(c(1, 2), nrow = 2), heights = c(6, 0.8))
+  par(mar = c(8, 28, 4, 4))
+
+  # Reverse rows for image() so the first clustered row appears at the top.
+  display_matrix <- heatmap_matrix[rev(seq_len(nrow(heatmap_matrix))), , drop = FALSE]
+  image(
+    x = seq_len(ncol(display_matrix)),
+    y = seq_len(nrow(display_matrix)),
+    z = t(display_matrix),
+    col = colors,
+    breaks = breaks,
+    axes = FALSE,
+    xlab = xlab,
+    ylab = "",
+    main = main
+  )
+  axis(
+    1,
+    at = seq_len(ncol(display_matrix)),
+    labels = colnames(display_matrix),
+    las = 2,
+    cex.axis = 0.62
+  )
+  axis(
+    2,
+    at = seq_len(nrow(display_matrix)),
+    labels = rownames(display_matrix),
+    las = 1,
+    cex.axis = y_axis_cex
+  )
+  box()
+
+  draw_color_key(colors, breaks, key_label)
+
+  invisible(output_file)
 }
 
 # Plot centered differences for one estimate series. Genes are ordered by that
-# series' CV so each plot uses its own stability ranking.
-plot_centered_difference <- function(series_name) {
+# series' CV, while settings on the other axis are clustered.
+plot_centered_difference_heatmap <- function(series_name) {
   series_data <- estimate_data[estimate_data$series == series_name, ]
   gene_order <- series_cv_order(series_name)
-  series_data$gene_index <- match(series_data$gene_id, gene_order)
-  series_data <- series_data[order(series_data$setting, series_data$gene_index), ]
+  plot_settings <- sort(unique(series_data$setting))
+  heatmap_matrix <- long_to_matrix(
+    series_data,
+    row_col = "setting",
+    col_col = "gene_id",
+    value_col = "difference",
+    row_order = plot_settings,
+    col_order = gene_order
+  )
 
   output_file <- file.path(
     plot_dir,
-    sprintf("centered_difference_%s.png", safe_filename(series_name))
+    sprintf("heatmap_centered_difference_%s.png", safe_filename(series_name))
   )
+  colors <- grDevices::colorRampPalette(c("#2166ac", "#f7f7f7", "#b2182b"))(101)
 
-  grDevices::png(output_file, width = 2800, height = 1700, res = 180)
-  old_par <- par(no.readonly = TRUE)
-  on.exit({
-    par(old_par)
-    grDevices::dev.off()
-  })
-
-  layout(matrix(c(1, 2), nrow = 2), heights = c(4, 1.3))
-  par(mar = c(8, 5, 4, 2), xpd = FALSE)
-  y_range <- range(series_data$difference, na.rm = TRUE)
-
-  # Initialize the plot without data so all settings share the same axes.
-  plot(
-    seq_along(gene_order),
-    rep(NA_real_, length(gene_order)),
-    type = "n",
-    xaxt = "n",
+  plot_heatmap(
+    heatmap_matrix = heatmap_matrix,
+    colors = colors,
+    breaks = difference_breaks(series_data$difference, length(colors)),
+    output_file = output_file,
+    main = sprintf("Centered differences: %s", series_name),
     xlab = "Genes ordered by CV for this estimate series",
-    ylab = "Estimate minus gene-wise setting mean",
-    ylim = y_range,
-    main = sprintf("Centered differences: %s", series_name)
+    key_label = "Estimate minus gene-wise setting mean",
+    y_axis_cex = 0.42
   )
-  axis(
-    1,
-    at = seq_along(gene_order),
-    labels = gene_order,
-    las = 2,
-    cex.axis = 0.65
-  )
-  abline(h = 0, col = "gray70", lty = 2)
-
-  # Draw one line per benchmark setting using the series-specific gene order.
-  plot_settings <- sort(unique(series_data$setting))
-  colors <- line_colors(length(plot_settings))
-  for (i in seq_along(plot_settings)) {
-    setting_data <- series_data[series_data$setting == plot_settings[i], ]
-    setting_data <- setting_data[order(setting_data$gene_index), ]
-    lines(
-      setting_data$gene_index,
-      setting_data$difference,
-      col = colors[i],
-      lwd = 1.2
-    )
-  }
-  draw_legend_panel(plot_settings, colors, columns = 2L)
-
-  invisible(output_file)
 }
 
-# Plot CV for all estimate series. Genes are ordered by their average CV across
-# available coefficient, SE, and dispersion series.
-plot_cv <- function() {
+# Plot CV for all estimate series. Genes are ordered by average CV, while
+# estimate series on the other axis are clustered.
+plot_cv_heatmap <- function() {
   cv_data <- summary_values[summary_values$gene_id %in% average_cv_order, ]
-  cv_data$gene_index <- match(cv_data$gene_id, average_cv_order)
-  cv_data <- cv_data[order(cv_data$series, cv_data$gene_index), ]
   series_names <- sort(unique(cv_data$series))
+  heatmap_matrix <- long_to_matrix(
+    cv_data,
+    row_col = "series",
+    col_col = "gene_id",
+    value_col = "cv",
+    row_order = series_names,
+    col_order = average_cv_order
+  )
+  output_file <- file.path(plot_dir, "heatmap_coefficient_of_variation_by_gene.png")
+  colors <- grDevices::colorRampPalette(c("#fffff7", "#fed976", "#bd0026"))(101)
 
-  output_file <- file.path(plot_dir, "coefficient_of_variation_by_gene.png")
-
-  grDevices::png(output_file, width = 2800, height = 1700, res = 180)
-  old_par <- par(no.readonly = TRUE)
-  on.exit({
-    par(old_par)
-    grDevices::dev.off()
-  })
-
-  layout(matrix(c(1, 2), nrow = 2), heights = c(4, 1.1))
-  par(mar = c(8, 5, 4, 2), xpd = FALSE)
-  y_range <- range(cv_data$cv, na.rm = TRUE)
-
-  # Initialize the plot without data so all estimate series share the same axes.
-  plot(
-    seq_along(average_cv_order),
-    rep(NA_real_, length(average_cv_order)),
-    type = "n",
-    xaxt = "n",
+  plot_heatmap(
+    heatmap_matrix = heatmap_matrix,
+    colors = colors,
+    breaks = cv_breaks(cv_data$cv, length(colors)),
+    output_file = output_file,
+    main = "Coefficient of variation across settings",
     xlab = "Genes ordered by average CV",
-    ylab = "Coefficient of variation",
-    ylim = y_range,
-    main = "Coefficient of variation across settings"
+    key_label = "Coefficient of variation",
+    y_axis_cex = 0.58
   )
-  axis(
-    1,
-    at = seq_along(average_cv_order),
-    labels = average_cv_order,
-    las = 2,
-    cex.axis = 0.65
-  )
-
-  # Draw one line per estimate series using the average-CV gene order.
-  colors <- line_colors(length(series_names))
-  for (i in seq_along(series_names)) {
-    series_data <- cv_data[cv_data$series == series_names[i], ]
-    series_data <- series_data[order(series_data$gene_index), ]
-    lines(
-      series_data$gene_index,
-      series_data$cv,
-      col = colors[i],
-      lwd = 1.2
-    )
-  }
-  draw_legend_panel(series_names, colors, columns = 3L)
-
-  invisible(output_file)
 }
 
 plot_files <- c(
-  vapply(sort(unique(estimate_data$series)), plot_centered_difference, character(1)),
-  plot_cv()
+  vapply(sort(unique(estimate_data$series)), plot_centered_difference_heatmap, character(1)),
+  plot_cv_heatmap()
 )
 
 write.csv(
