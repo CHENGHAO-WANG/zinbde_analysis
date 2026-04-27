@@ -143,6 +143,23 @@ line_colors <- function(n) {
   grDevices::hcl.colors(n, palette = "Dark 3")
 }
 
+# Draw a legend in its own plotting panel so long labels are not clipped by the
+# main plot margins or the PNG device boundary.
+draw_legend_panel <- function(labels, colors, columns) {
+  par(mar = c(0, 5, 0, 2), xpd = NA)
+  plot.new()
+  legend(
+    "center",
+    legend = labels,
+    col = colors,
+    lty = 1,
+    lwd = 1.2,
+    ncol = columns,
+    cex = 0.58,
+    bty = "n"
+  )
+}
+
 # Plot centered differences for one estimate series. Genes are ordered by that
 # series' CV so each plot uses its own stability ranking.
 plot_centered_difference <- function(series_name) {
@@ -156,14 +173,15 @@ plot_centered_difference <- function(series_name) {
     sprintf("centered_difference_%s.png", safe_filename(series_name))
   )
 
-  grDevices::png(output_file, width = 2400, height = 1400, res = 180)
+  grDevices::png(output_file, width = 2800, height = 1700, res = 180)
   old_par <- par(no.readonly = TRUE)
   on.exit({
     par(old_par)
     grDevices::dev.off()
   })
 
-  par(mar = c(9, 5, 4, 12), xpd = NA)
+  layout(matrix(c(1, 2), nrow = 2), heights = c(4, 1.3))
+  par(mar = c(8, 5, 4, 2), xpd = FALSE)
   y_range <- range(series_data$difference, na.rm = TRUE)
 
   # Initialize the plot without data so all settings share the same axes.
@@ -199,16 +217,7 @@ plot_centered_difference <- function(series_name) {
       lwd = 1.2
     )
   }
-  legend(
-    "topright",
-    inset = c(-0.28, 0),
-    legend = plot_settings,
-    col = colors,
-    lty = 1,
-    lwd = 1.2,
-    cex = 0.65,
-    bty = "n"
-  )
+  draw_legend_panel(plot_settings, colors, columns = 2L)
 
   invisible(output_file)
 }
@@ -223,14 +232,15 @@ plot_cv <- function() {
 
   output_file <- file.path(plot_dir, "coefficient_of_variation_by_gene.png")
 
-  grDevices::png(output_file, width = 2400, height = 1400, res = 180)
+  grDevices::png(output_file, width = 2800, height = 1700, res = 180)
   old_par <- par(no.readonly = TRUE)
   on.exit({
     par(old_par)
     grDevices::dev.off()
   })
 
-  par(mar = c(9, 5, 4, 12), xpd = NA)
+  layout(matrix(c(1, 2), nrow = 2), heights = c(4, 1.1))
+  par(mar = c(8, 5, 4, 2), xpd = FALSE)
   y_range <- range(cv_data$cv, na.rm = TRUE)
 
   # Initialize the plot without data so all estimate series share the same axes.
@@ -264,16 +274,7 @@ plot_cv <- function() {
       lwd = 1.2
     )
   }
-  legend(
-    "topright",
-    inset = c(-0.28, 0),
-    legend = series_names,
-    col = colors,
-    lty = 1,
-    lwd = 1.2,
-    cex = 0.65,
-    bty = "n"
-  )
+  draw_legend_panel(series_names, colors, columns = 3L)
 
   invisible(output_file)
 }
