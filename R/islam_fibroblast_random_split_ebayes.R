@@ -25,6 +25,7 @@ set.seed(20260427)
 
 input_file <- file.path("data", "processed", "islam_dea_obj.rds")
 output_dir <- file.path("output", "islam_fibroblast_random_split_ebayes")
+wald_results_file <- file.path(output_dir, "wald_p_values.rds")
 
 tight_tol <- 1e-8
 loose_tol <- 1e-2
@@ -35,6 +36,8 @@ n_iterations <- as.integer(Sys.getenv("ISLAM_RANDOM_SPLIT_ITERATIONS", "20"))
 nb_formula <- ~ random_group
 zi_formula <- ~ random_group
 wald_coef <- "random_groupgroup_2"
+plot_only <- tolower(Sys.getenv("ISLAM_RANDOM_SPLIT_PLOT_ONLY", "false")) %in%
+  c("1", "true", "yes")
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -114,10 +117,11 @@ format_wald_rows <- function(wald, iteration, stage) {
   wald
 }
 
-# Save one histogram for one Wald-test metric at one analysis stage.
-plot_histogram <- function(results, stage, value_column, filename, x_label) {
+# Save one histogram for one Wald-test metric, analysis stage, and component.
+plot_histogram <- function(results, stage, component, value_column, filename, x_label) {
   plot_data <- results[
     results$stage == stage &
+      results$component == component &
       is.finite(results[[value_column]]) &
       results[[value_column]] >= 0 &
       results[[value_column]] <= 1,
@@ -137,7 +141,12 @@ plot_histogram <- function(results, stage, value_column, filename, x_label) {
     labs(
       x = x_label,
       y = "Count",
-      title = sprintf("%s (%s)", x_label, gsub("_", " ", stage, fixed = TRUE))
+      title = sprintf(
+        "%s (%s, %s)",
+        x_label,
+        gsub("_", " ", stage, fixed = TRUE),
+        component
+      )
     ) +
     theme_minimal(base_size = 11) +
     theme(plot.title = element_text(face = "bold"))
@@ -151,8 +160,79 @@ plot_histogram <- function(results, stage, value_column, filename, x_label) {
   )
 }
 
+# Save p-value and adjusted p-value histograms for each Wald-test component.
+plot_component_histograms <- function(results) {
+  legacy_histograms <- file.path(
+    output_dir,
+    c(
+      "p_value_before_ebayes_histogram.png",
+      "p_value_after_ebayes_histogram.png",
+      "p_adj_before_ebayes_histogram.png",
+      "p_adj_after_ebayes_histogram.png"
+    )
+  )
+  file.remove(legacy_histograms[file.exists(legacy_histograms)])
+
+  expected_components <- c("nb", "zi", "joint")
+  missing_components <- setdiff(expected_components, unique(results$component))
+
+  if (length(missing_components) > 0L) {
+    warning(
+      sprintf(
+        "Saved Wald results do not contain component(s): %s.",
+        paste(missing_components, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  plot_specs <- expand.grid(
+    stage = c("before_ebayes", "after_ebayes"),
+    component = expected_components,
+    value_column = c("p_value", "p_adj"),
+    stringsAsFactors = FALSE
+  )
+
+  for (i in seq_len(nrow(plot_specs))) {
+    spec <- plot_specs[i, ]
+    plot_histogram(
+      results = results,
+      stage = spec$stage,
+      component = spec$component,
+      value_column = spec$value_column,
+      filename = sprintf(
+        "%s_%s_%s_histogram.png",
+        spec$value_column,
+        spec$stage,
+        spec$component
+      ),
+      x_label = if (identical(spec$value_column, "p_value")) {
+        "Wald p-value"
+      } else {
+        "Wald adjusted p-value"
+      }
+    )
+  }
+}
+
 sample_size <- as_positive_integer(sample_size, "sample_size")
 n_iterations <- as_positive_integer(n_iterations, "n_iterations")
+
+if (plot_only) {
+  if (!file.exists(wald_results_file)) {
+    stop(
+      sprintf("Cannot run in plot-only mode; missing %s.", wald_results_file),
+      call. = FALSE
+    )
+  }
+
+  wald_results <- readRDS(wald_results_file)
+  plot_component_histograms(wald_results)
+  cat("Loaded Wald results from:", normalizePath(wald_results_file, winslash = "/"), "\n")
+  cat("Output directory:", normalizePath(output_dir, winslash = "/", mustWork = TRUE), "\n")
+  cat("Wald result rows:", nrow(wald_results), "\n")
+  quit(save = "no")
+}
 
 cat("Input file:", normalizePath(input_file, winslash = "/", mustWork = TRUE), "\n")
 islam <- readRDS(input_file)
@@ -281,41 +361,14 @@ split_assignments <- do.call(rbind, split_assignments)
 
 saveRDS(sampled_genes, file.path(output_dir, "selected_genes.rds"))
 saveRDS(split_assignments, file.path(output_dir, "split_assignments.rds"))
-saveRDS(wald_results, file.path(output_dir, "wald_p_values.rds"))
+saveRDS(wald_results, wald_results_file)
 utils::write.csv(
   wald_results,
   file = file.path(output_dir, "wald_p_values.csv"),
   row.names = FALSE
 )
 
-plot_histogram(
-  results = wald_results,
-  stage = "before_ebayes",
-  value_column = "p_value",
-  filename = "p_value_before_ebayes_histogram.png",
-  x_label = "Wald p-value"
-)
-plot_histogram(
-  results = wald_results,
-  stage = "after_ebayes",
-  value_column = "p_value",
-  filename = "p_value_after_ebayes_histogram.png",
-  x_label = "Wald p-value"
-)
-plot_histogram(
-  results = wald_results,
-  stage = "before_ebayes",
-  value_column = "p_adj",
-  filename = "p_adj_before_ebayes_histogram.png",
-  x_label = "Wald adjusted p-value"
-)
-plot_histogram(
-  results = wald_results,
-  stage = "after_ebayes",
-  value_column = "p_adj",
-  filename = "p_adj_after_ebayes_histogram.png",
-  x_label = "Wald adjusted p-value"
-)
+plot_component_histograms(wald_results)
 
 cat("Output directory:", normalizePath(output_dir, winslash = "/", mustWork = TRUE), "\n")
 cat("Wald result rows:", nrow(wald_results), "\n")
