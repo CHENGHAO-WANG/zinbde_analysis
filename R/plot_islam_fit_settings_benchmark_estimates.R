@@ -7,6 +7,16 @@ plot_dir <- file.path("output", "islam_fit_settings_benchmark_estimate_plots")
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
 unlink(list.files(plot_dir, pattern = "[.]png$", full.names = TRUE))
 
+plot_text_cex <- list(
+  x_axis = 0.68,
+  y_axis_settings = 0.78,
+  y_axis_series = 0.9,
+  key_axis = 0.9,
+  key_label = 0.95,
+  main = 1.15,
+  label = 1.05
+)
+
 discordant_file <- file.path(benchmark_dir, "discordant_zi_decision_model_types.csv")
 decisions_file <- file.path(benchmark_dir, "zi_decisions.csv")
 coefficients_file <- file.path(benchmark_dir, "coefficients.csv")
@@ -197,7 +207,7 @@ cv_breaks <- function(values, color_count) {
 draw_color_key <- function(colors, breaks, label) {
   key_values <- seq(min(breaks), max(breaks), length.out = length(colors))
 
-  par(mar = c(5, 28, 0.5, 4))
+  par(mar = c(5, 28, 0.5, 4), cex.lab = plot_text_cex$label)
   image(
     x = key_values,
     y = 1,
@@ -208,8 +218,8 @@ draw_color_key <- function(colors, breaks, label) {
     xlab = "",
     ylab = ""
   )
-  axis(1, cex.axis = 0.75)
-  mtext(label, side = 1, line = 2.7, cex = 0.8)
+  axis(1, cex.axis = plot_text_cex$key_axis)
+  mtext(label, side = 1, line = 2.7, cex = plot_text_cex$key_label)
 }
 
 # Draw a heatmap with clustered rows and fixed gene columns.
@@ -221,7 +231,7 @@ plot_heatmap <- function(
     main,
     xlab,
     key_label,
-    y_axis_cex = 0.5) {
+    y_axis_cex = plot_text_cex$y_axis_settings) {
   row_order <- cluster_row_order(heatmap_matrix)
   heatmap_matrix <- heatmap_matrix[row_order, , drop = FALSE]
 
@@ -233,7 +243,11 @@ plot_heatmap <- function(
   })
 
   layout(matrix(c(1, 2), nrow = 2), heights = c(6, 0.8))
-  par(mar = c(8, 28, 4, 4))
+  par(
+    mar = c(10, 28, 4, 4),
+    cex.main = plot_text_cex$main,
+    cex.lab = plot_text_cex$label
+  )
 
   # Reverse rows for image() so the first clustered row appears at the top.
   display_matrix <- heatmap_matrix[rev(seq_len(nrow(heatmap_matrix))), , drop = FALSE]
@@ -244,7 +258,7 @@ plot_heatmap <- function(
     col = colors,
     breaks = breaks,
     axes = FALSE,
-    xlab = xlab,
+    xlab = "",
     ylab = "",
     main = main
   )
@@ -253,8 +267,9 @@ plot_heatmap <- function(
     at = seq_len(ncol(display_matrix)),
     labels = colnames(display_matrix),
     las = 2,
-    cex.axis = 0.62
+    cex.axis = plot_text_cex$x_axis
   )
+  mtext(xlab, side = 1, line = 7, cex = plot_text_cex$label)
   axis(
     2,
     at = seq_len(nrow(display_matrix)),
@@ -298,7 +313,7 @@ plot_centered_difference_heatmap <- function(series_name) {
     main = sprintf("Centered differences: %s", series_name),
     xlab = "Genes ordered by CV for this estimate series",
     key_label = "Estimate minus gene-wise setting mean",
-    y_axis_cex = 0.42
+    y_axis_cex = plot_text_cex$y_axis_settings
   )
 }
 
@@ -326,7 +341,7 @@ plot_cv_heatmap <- function() {
     main = "Coefficient of variation across settings",
     xlab = "Genes ordered by average CV",
     key_label = "Coefficient of variation",
-    y_axis_cex = 0.58
+    y_axis_cex = plot_text_cex$y_axis_series
   )
 }
 
